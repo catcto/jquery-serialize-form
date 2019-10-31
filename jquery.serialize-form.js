@@ -1,19 +1,127 @@
-!function(e,i){if("function"==typeof define&&define.amd)define(["exports","jquery"],function(e,r){return i(e,r)});else if("undefined"!=typeof exports){var r=require("jquery");i(exports,r)}else i(e,e.jQuery||e.Zepto||e.ender||e.
-)}(this,function(e,i){function r(e,r){function n(e,i,r){return e[i]=r,e}function a(e,i){for(var r,a=e.match(t.key);void 0!==(r=a.pop());)if(t.push.test(r)){var u=s(e.replace(/\[\]$/,""));i=n([],u,i)}else t.fixed.test(r)?i=n([],r,i):t.named.test(r)&&(i=n({},r,i));return i}function s(e){return void 0===h[e]&&(h[e]=0),h[e]++}function u(e){switch(i('[name="'+e.name+'"]',r).attr("type")){case"checkbox":return"on"===e.value?!0:e.value;default:return e.value}}function f(i){if(!t.validate.test(i.name))return this;var r=a(i.name,u(i));return l=e.extend(!0,l,r),this}function d(i){if(!e.isArray(i))throw new Error("formSerializer.addPairs expects an Array");for(var r=0,t=i.length;t>r;r++)this.addPair(i[r]);return this}function o(){return l}function c(){return JSON.stringify(o())}var l={},h={};this.addPair=f,this.addPairs=d,this.serialize=o,this.serializeJSON=c}var t={validate:/^[a-z_][a-z0-9_]*(?:\[(?:\d*|[a-z0-9_]+)\])*$/i,key:/[a-z0-9_]+|(?=\[\])/gi,push:/^$/,fixed:/^\d+$/,named:/^[a-z0-9_]+$/i};return r.patterns=t,r.serializeObject=function(){return new r(i,this).addPairs(this.serializeArray()).serialize()},r.serializeJSON=function(){return new r(i,this).addPairs(this.serializeArray()).serializeJSON()},"undefined"!=typeof i.fn&&(i.fn.serializeObject=r.serializeObject,i.fn.serializeJSON=r.serializeJSON),e.FormSerializer=r,r});
-$.fn.extend({
-    serializeArray: function () {
-        var brokenSerialization = $.fn.serializeArray.apply(this);
-        var checkboxValues = $(this).find('input[type=checkbox]').map(function () {
-            return { 'name': this.name, 'value': this.checked };
-        }).get();
-        var selectValues = $(this).find('select[multiple]').map(function () {
-            return this.value ? null : { 'name': this.name };
-        }).get();
-        var checkboxKeys = $.map(checkboxValues, function (element) { return element.name; });
-        var withoutCheckboxes = $.grep(brokenSerialization, function (element) {
-            return $.inArray(element.name, checkboxKeys) == -1;
-        });
-        //console.log(selectValues);
-        return $.merge(withoutCheckboxes, $.merge(checkboxValues, selectValues));
-    }
-});
+(function (root, factory) {
+        // AMD
+        if (typeof define === "function" && define.amd) {
+            define(["exports", "jquery"], function (exports, $) {
+                return factory(exports, $);
+            });
+        }
+        // CommonJS
+        else if (typeof exports !== "undefined") {
+            var $ = require("jquery");
+            factory(exports, $);
+        }
+        // Browser
+        else {
+            factory(root, (root.jQuery || root.Zepto || root.ender || root.$));
+        }
+    }(this, function (exports, $) {
+        var patterns = {
+            validate: /^[a-z_][a-z0-9_]*(?:\[(?:\d*|[a-z0-9_]+)\])*$/i,
+            key: /[a-z0-9_]+|(?=\[\])/gi,
+            push: /^$/,
+            fixed: /^\d+$/,
+            named: /^[a-z0-9_]+$/i
+        };
+        function FormSerializer(helper, $form) {
+            // private variables
+            var data = {};
+            var pushes = {};
+            // private API
+            function build(base, key, value) {
+                base[key] = value;
+                return base;
+            }
+            function makeObject(root, value) {
+                var keys = root.match(patterns.key), k;
+                // nest, nest, ..., nest
+                while ((k = keys.pop()) !== undefined) {
+                    // foo[]
+                    if (patterns.push.test(k)) {
+                        var idx = incrementPush(root.replace(/\[\]$/, ''));
+                        value = build([], idx, value);
+                    }
+                    // foo[n]
+                    else if (patterns.fixed.test(k)) {
+                        value = build([], k, value);
+                    }
+                    // foo; foo[bar]
+                    else if (patterns.named.test(k)) {
+                        value = build({}, k, value);
+                    }
+                }
+                return value;
+            }
+            function incrementPush(key) {
+                if (pushes[key] === undefined) {
+                    pushes[key] = 0;
+                }
+                return pushes[key]++;
+            }
+            function encode(pair) {
+                switch ($('[name="' + pair.name + '"]', $form).attr("type")) {
+                    case "checkbox":
+                        return pair.value === "on" ? true : pair.value;
+                    default:
+                        return pair.value;
+                }
+            }
+            function addPair(pair) {
+                if (!patterns.validate.test(pair.name)) return this;
+                var obj = makeObject(pair.name, encode(pair));
+                data = helper.extend(true, data, obj);
+                return this;
+            }
+            function addPairs(pairs) {
+                if (!helper.isArray(pairs)) {
+                    throw new Error("formSerializer.addPairs expects an Array");
+                }
+                for (var i = 0, len = pairs.length; i < len; i++) {
+                    this.addPair(pairs[i]);
+                }
+                return this;
+            }
+            function serialize() {
+                return data;
+            }
+            function serializeJSON() {
+                return JSON.stringify(serialize());
+            }
+            // public API
+            this.addPair = addPair;
+            this.addPairs = addPairs;
+            this.serialize = serialize;
+            this.serializeJSON = serializeJSON;
+        }
+        FormSerializer.patterns = patterns;
+        FormSerializer.serializeObject = function serializeObject() {
+            return new FormSerializer($, this).addPairs(this.serializeArray()).serialize();
+        };
+        FormSerializer.serializeJSON = function serializeJSON() {
+            return new FormSerializer($, this).addPairs(this.serializeArray()).serializeJSON();
+        };
+        if (typeof $.fn !== "undefined") {
+            $.fn.serializeObject = FormSerializer.serializeObject;
+            $.fn.serializeJSON = FormSerializer.serializeJSON;
+        }
+        exports.FormSerializer = FormSerializer;
+        return FormSerializer;
+    }));
+    $.fn.extend({
+        serializeArray: function () {
+            var brokenSerialization = $.fn.serializeArray.apply(this);
+            var checkboxValues = $(this).find('input[type=checkbox]').map(function () {
+                return {'name': this.name, 'value': this.checked};
+            }).get();
+            var selectValues = $(this).find('select[multiple]').map(function () {
+                return this.value ? null : {'name': this.name};
+            }).get();
+            var checkboxKeys = $.map(checkboxValues, function (element) {
+                return element.name;
+            });
+            var withoutCheckboxes = $.grep(brokenSerialization, function (element) {
+                return $.inArray(element.name, checkboxKeys) == -1;
+            });
+            //console.log(selectValues);
+            return $.merge(withoutCheckboxes, $.merge(checkboxValues, selectValues));
+        }
+    });
